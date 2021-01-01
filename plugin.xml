@@ -20,6 +20,18 @@
                 <param name="android-package" value="fr.drangies.cordova.serial.Serial"/>
             </feature>
         </config-file>
+        <config-file target="res/xml/device_filter.xml" parent="/*">
+           <resources>
+               <!-- Aerometrix sensors VID/PID based on FTDI chip -->
+               <usb-device vendor-id="1027" product-id="24597" />
+            </resources>
+        </config-file>
+        <config-file target="AndroidManifest.xml" parent="/manifest/application/activity">
+            <intent-filter android:label="@string/launcher_name">
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter" />
+        </config-file>
         <source-file src="src/android/fr/drangies/cordova/serial/Serial.java" target-dir="src/fr/drangies/cordova/serial" />
         <source-file src="src/android/fr/drangies/cordova/serial/UsbBroadcastReceiver.java" target-dir="src/fr/drangies/cordova/serial" />
         <lib-file src="lib/usbseriallibrary.jar" arch="device" />

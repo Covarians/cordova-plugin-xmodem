@@ -61,6 +61,12 @@ public class Serial extends CordovaPlugin {
 	private static final int READ_WAIT_MILLIS = 200;
 	private static final int BUFSIZ = 4096;
 	private final ByteBuffer mReadBuffer = ByteBuffer.allocate(BUFSIZ);
+
+	// Constants required for XMODEM
+	private final int MESSAGE_LENGTH = 1029;
+	private final int EOT = 0x04;
+	private final int NAK = 0x15;
+	
 	// Connection info
 	private int baudRate;
 	private int dataBits;
@@ -275,6 +281,7 @@ public class Serial extends CordovaPlugin {
 	private void writeSerial(final String data, final CallbackContext callbackContext) {
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
+				mReadBuffer.position(0);  // ADDED by COVARIANS to clear Buffer on ACK/NAK
 				if (port == null) {
 					callbackContext.error("Writing a closed port.");
 				}
@@ -440,14 +447,48 @@ public class Serial extends CordovaPlugin {
 
 	/**
 	 * Dispatch read data to javascript
+	 * Not used any longer
 	 * @param data the array of bytes to dispatch
 	 */
-	private void updateReceivedData(byte[] data) {
+	private void updateReceivedData_Old(byte[] data) {
 		if( readCallback != null ) {
 			PluginResult result = new PluginResult(PluginResult.Status.OK, data);
 			result.setKeepCallback(true);
 			readCallback.sendPluginResult(result);
 		}
+	}
+
+	/**
+	 * Dispatch read data to javascript
+	 * This file has be modified to handle part of the XMODEM Rx Protocole 
+	 * @param msg the array of bytes to dispatch
+	 */
+	private void updateReceivedData(byte[] msg) {
+		if( readCallback != null ) {
+			Log.d(TAG, "Received bytes1:" + msg.length + " Position:" + mReadBuffer.position() + " Capa: " + mReadBuffer.capacity());
+			mReadBuffer.put(msg);
+
+			// Test for end of transmission
+			if ((mReadBuffer.position() == 1) && ((msg[0] == EOT) || (msg[0] == NAK))) {
+				Log.d(TAG, "Received EOT or NAK");
+				PluginResult result = new PluginResult(PluginResult.Status.OK, msg);
+				result.setKeepCallback(true);
+				readCallback.sendPluginResult(result);
+			}
+
+			// Test for full message block
+			if (mReadBuffer.position() >= MESSAGE_LENGTH) {
+				byte[] data = new byte[mReadBuffer.position()];
+				mReadBuffer.flip();
+				mReadBuffer.get(data);
+				mReadBuffer.clear();
+				Log.d(TAG, "Transfered bytes:" + data.length);
+				PluginResult result = new PluginResult(PluginResult.Status.OK, data);
+				result.setKeepCallback(true);
+				readCallback.sendPluginResult(result);
+			}
+		}
+
 	}
 
 	/**
