@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
-    id="cordovarduino"
-    version="0.0.10">
-    <name>Serial</name>
-    <description>Cordova plugin to communicate with the android USB serial port</description>
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    id="cordova-plugin-xmodem"
+    version="0.1.0">
+    <name>Cordova XMODEM plugin</name>
+    <description>Cordova plugin to exchange data with android devices through the USB serial port and XMODEM 1K</description>
     <license>MIT</license>
-    <keywords>serial,arduino</keywords>
+    <keywords>serial,xmodem</keywords>
 
     <!-- js module -->
     <js-module src="www/serial.js" name="Serial">
@@ -17,12 +17,13 @@
     <platform name="android">
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="Serial">
-                <param name="android-package" value="fr.drangies.cordova.serial.Serial"/>
+                <param name="android-package" value="com.covarians.cordova.serial.Serial"/>
             </feature>
         </config-file>
+        <!-- To fill the ressource file to declare USB divices for filter intent -->
         <config-file target="res/xml/device_filter.xml" parent="/*">
            <resources>
-               <!-- Aerometrix sensors VID/PID based on FTDI chip -->
+               <!-- Aerometrix sensors VID/PID based on FTDI chip (0403/6015) in decimal -->
                <usb-device vendor-id="1027" product-id="24597" />
             </resources>
         </config-file>
@@ -32,8 +33,10 @@
             </intent-filter>
             <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter" />
         </config-file>
-        <source-file src="src/android/fr/drangies/cordova/serial/Serial.java" target-dir="src/fr/drangies/cordova/serial" />
-        <source-file src="src/android/fr/drangies/cordova/serial/UsbBroadcastReceiver.java" target-dir="src/fr/drangies/cordova/serial" />
+        <source-file src="src/android/com/covarians/cordova/serial/Serial.java" target-dir="src/com/covarians/cordova/serial" />
+        <source-file src="src/android/com/covarians/cordova/serial/UsbBroadcastReceiver.java" target-dir="src/com/covarians/cordova/serial" />
+        <!-- Ressource file to declare USB divices for filter intent -->
+        <resource-file src="device_filter.xml" target="res/xml/device_filter.xml" />
         <lib-file src="lib/usbseriallibrary.jar" arch="device" />
     </platform>
 
