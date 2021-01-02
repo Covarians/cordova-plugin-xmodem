@@ -1,11 +1,13 @@
 # MODIFICATIONS TO CORDOVARDUINO
 
 ## 1. Modifications to file Serial.java 
-This file is located in .\plugins\cordovarduino\src\fr\drangies\cordova\serial
-and the copied to .\platforms\android\app\src\main\java\fr\drangies\cordova\serial
+This file is located in .\src\android\com\covarians\cordova\serial
+and the copied to .\platforms\android\app\src\main\java\com\covarians\cordova\serial
+
+It is also required to change the package name of this file and of UsbBroadcastReceiver.java to include the name of the directory. 
 
 ### 1.1 Add constants for XMODEM
-````c
+````java
 // Constants required for XMODEM
 	private final int MESSAGE_LENGTH = 1029;
 	private final int EOT = 0x04;
@@ -13,7 +15,7 @@ and the copied to .\platforms\android\app\src\main\java\fr\drangies\cordova\seri
 ````
 
 ### 1.2 Change function updateReceivedData(byte[] msg)
-````c
+````java
 	/**
 	 * Dispatch read data to javascript
 	 * @param msg the array of bytes to dispatch
@@ -49,36 +51,32 @@ and the copied to .\platforms\android\app\src\main\java\fr\drangies\cordova\seri
 
 ### 1.3 Add line to Serial Write
 
-````c
+````java
 			public void run() {
 				mReadBuffer.position(0);  // ADDED by COVARIANS to clear Buffer on ACK/NAK
 				if (port == null) {
 ````
 
 ## 2 Modification du fichier config.xml
-Ces modificatrions du plugin permettent d'ajouter automatiquement des éléments à AndroidManifest.xml
-ainsi qu'un fichier device_filter.xml dans le répertoire res\xml.
+Ces modifications du plugin permettent d'ajouter automatiquement des éléments à AndroidManifest.xml ainsi qu'un fichier device_filter.xml dans le répertoire res\xml. Le modèle du fichier est dans la racine du plugin.
 Ces modifications permettent d'éviter la fenêtre de demande de permission quand on veut utiliser l'USB
 
-````c
-        <config-file target="res/xml/device_filter.xml" parent="/*">
-           <resources>
-               <!-- Aerometrix sensors VID/PID based on FTDI chip -->
-               <usb-device vendor-id="1027" product-id="24597" />
-            </resources>
-        </config-file>
+````xml
         <config-file target="AndroidManifest.xml" parent="/manifest/application/activity">
             <intent-filter android:label="@string/launcher_name">
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
             <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter" />
         </config-file>
+    
+        <!-- Ressource file to declare USB divices for filter intent -->
+        <resource-file src="device_filter.xml" target="res/xml/device_filter.xml" />
 ````
 
 
 
 ## 2 Update of usbseriallibrary.jar
+Mise en place de la dernière release de cette library.
 
-
-
-# MODIFICATIONS TO BLUETOOTHLE
+## 3 Update of package.json
+This is done with plugman createpackagejson ./ 

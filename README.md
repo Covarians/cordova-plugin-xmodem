@@ -299,3 +299,5 @@ You can find your devices VID and PID on linux or android using "lsusb" (returni
 2014.03: [Ed. Lafargue](https://github.com/elafargue): Implemented read(). The success callback returns a Javascript ArrayBuffer which is the best way to handle binary data in Javascript. It is straightforward to convert this to a string if required - a utility function could be implemented in this plugin.
 
 2013.11: [Xavier Seignard](https://github.com/xseignard): First implementation
+
+2021.01: [Frédéric Griffe]: Modified to achieve XMODEM transfer

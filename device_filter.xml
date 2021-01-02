@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <!-- Aerometrix sensors VID/PID based on FTDI chip -->
+    <usb-device vendor-id="1027" product-id="24597" />
+</resources>

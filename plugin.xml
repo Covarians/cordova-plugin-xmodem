@@ -20,13 +20,6 @@
                 <param name="android-package" value="com.covarians.cordova.serial.Serial"/>
             </feature>
         </config-file>
-        <!-- To fill the ressource file to declare USB divices for filter intent -->
-        <config-file target="res/xml/device_filter.xml" parent="/*">
-           <resources>
-               <!-- Aerometrix sensors VID/PID based on FTDI chip (0403/6015) in decimal -->
-               <usb-device vendor-id="1027" product-id="24597" />
-            </resources>
-        </config-file>
         <config-file target="AndroidManifest.xml" parent="/manifest/application/activity">
             <intent-filter android:label="@string/launcher_name">
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />

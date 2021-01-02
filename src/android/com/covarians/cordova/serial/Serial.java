@@ -1,4 +1,4 @@
-package fr.drangies.cordova.serial;
+package com.covarians.cordova.serial;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

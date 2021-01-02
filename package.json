@@ -1,9 +1,9 @@
 {
-  "name": "cordovarduino",
-  "version": "0.0.10",
-  "description": "Cordova plugin to communicate with the android USB serial port",
+  "name": "cordova-plugin-xmodem",
+  "version": "0.1.0",
+  "description": "Cordova plugin to exchange data with android devices through the USB serial port and XMODEM 1K",
   "cordova": {
-    "id": "cordovarduino",
+    "id": "cordova-plugin-xmodem",
     "platforms": [
       "android",
       "ubuntu"
@@ -11,19 +11,19 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xseignard/cordovarduino.git"
+    "url": "git+https://github.com/Covarians/cordova-plugin-xmodem.git"
   },
   "keywords": [
     "serial",
-    "arduino",
+    "xmodem",
     "ecosystem:cordova",
     "cordova-android",
     "cordova-ubuntu"
   ],
-  "author": "Xavier Seignard <xavier.seignard@gmail.com>",
+  "author": "Griffe and X Seigner",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/xseignard/cordovarduino/issues"
+    "url": "https://github.com/Covarians/cordova-plugin-xmodem/issues"
   },
-  "homepage": "https://github.com/xseignard/cordovarduino#readme"
+  "homepage": "https://github.com/Covarians/cordova-plugin-xmodem#readme"
 }
