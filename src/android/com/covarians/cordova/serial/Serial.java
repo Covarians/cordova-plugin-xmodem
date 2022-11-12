@@ -318,8 +318,11 @@ public class Serial extends CordovaPlugin {
 					try {
 						Log.d(TAG, data);
 						byte[] buffer = hexStringToByteArray(data);
-						int result = port.write(buffer, 1000);
-						callbackContext.success(result + " bytes written.");
+						port.write(buffer, 1000);
+						callbackContext.success();
+						// bug corrected by cov : usbSerialPort write returns void instead of int
+						// int result = port.write(buffer, 1000);
+						// callbackContext.success(result + " bytes written.");
 					}
 					catch (IOException e) {
 						// deal with error
