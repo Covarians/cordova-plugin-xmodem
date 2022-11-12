@@ -2,7 +2,7 @@
 
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
     id="cordova-plugin-xmodem"
-    version="0.1.0">
+    version="0.1.1">
     <name>Cordova XMODEM plugin</name>
     <description>Cordova plugin to exchange data with android devices through the USB serial port and XMODEM 1K</description>
     <license>MIT</license>

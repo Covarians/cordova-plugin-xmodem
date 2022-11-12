@@ -78,5 +78,16 @@ Ces modifications permettent d'éviter la fenêtre de demande de permission quan
 ## 2 Update of usbseriallibrary.jar
 Mise en place de la dernière release de cette library.
 
+Méthode pour mettre à jour cette librairie:
+- cloner le repo https://github.com/mik3y/usb-serial-for-android
+- ouvrir le dossier du projet dans Android Studio
+- aller dans  File > Settings > Build, Execution, Deployment > Build Tools > Gradle
+- vérifier que Gradle JDK est bien sur la version 11 de Android JDK
+- puis faire Build > Make project dans l'écran principal
+- la librairie est le fichier classes.jar dans /usbSerialForAndroid/build/intermediates/runtime_library_classes_jar/debug/
+- renommer le fichier classes.jar en usbseriallibrary.jar
+- recopier ce fichier dans le répertoire /lib du présent projet et écraser l'ancienne version
+
+
 ## 3 Update of package.json
 This is done with plugman createpackagejson ./ 
