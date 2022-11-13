@@ -437,16 +437,18 @@ public class Serial extends CordovaPlugin {
 	 */
 	private void startIoManager() {
 		if (driver != null) {
-			// Void crashing with null port on serial port closind @COV
+			// Avoid crashing with null port on serial port closing @COV
 			if (port != null) {
-				Log.i(TAG, "Could not start io manager from null port.");
-			} else {
 				Log.i(TAG, "Starting io manager.");
 				mSerialIoManager = new SerialInputOutputManager(port, mListener);
 				mExecutor.submit(mSerialIoManager);
+				
+			} else {
+				Log.i(TAG, "Could not start io manager from null port.");
 			}
 		}
 	}
+
 
 	/**
 	 * Restart the observation of the serial connection
