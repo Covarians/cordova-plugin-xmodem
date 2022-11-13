@@ -399,6 +399,7 @@ public class Serial extends CordovaPlugin {
 	private void closeSerial(final CallbackContext callbackContext) {
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
+				stopIoManager(); // Added by @COV
 				try {
 					// Make sure we don't die if we try to close an non-existing port!
 					if (port != null) {
@@ -412,7 +413,9 @@ public class Serial extends CordovaPlugin {
 					Log.d(TAG, e.getMessage());
 					callbackContext.error(e.getMessage());
 				}
-				onDeviceStateChange();
+				// This method will cause app crash when the port is closed
+				// onDeviceStateChange();
+				
 			}
 		});
 	}
