@@ -66,7 +66,25 @@ var serial = {
             'registerReadCallback',
             []
         );
-    }
+    },
+    registerAttachCB: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'registerAttachCB',
+            []
+        );
+    },
+    registerDetachCB: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'registerDetachCB',
+            []
+        );
+    },
 
 };
 module.exports = serial;

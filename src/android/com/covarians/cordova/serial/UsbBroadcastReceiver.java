@@ -58,3 +58,83 @@ public class UsbBroadcastReceiver extends BroadcastReceiver {
 		}
 	}	
 }
+
+
+/**
+ * Custom {@link BroadcastReceiver} that can talk through a cordova {@link CallbackContext}
+ * @author Frederic GRIFFE
+ */
+public class UsbAttachReceiver extends BroadcastReceiver {
+	// logging tag
+	private final String TAG = UsbAttachReceiver.class.getSimpleName();
+	// cordova callback context to notify the success/error to the cordova app
+	private CallbackContext callbackContext;
+	// cordova activity to use it to unregister this broadcast receiver
+	private Activity activity;
+	
+	/**
+	 * Custom broadcast receiver that will handle the cordova callback context
+	 * @param callbackContext
+	 * @param activity
+	 */
+	public UsbAttachReceiver(CallbackContext callbackContext, Activity activity) {
+		this.callbackContext = callbackContext;
+		this.activity = activity;
+	}
+
+	
+	/**
+	 * Handle permission answer
+	 * @param context
+	 * @param intent
+	 * @see android.content.BroadcastReceiver#onReceive(android.content.Context, android.content.Intent)
+	 */
+	@Override
+	public void onReceive(Context context, Intent intent) {
+		String action = intent.getAction();
+		if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+				Log.d(TAG, "USB Device attached");
+				callbackContext.success("USB Device attached");
+		} 
+	}
+}	
+
+
+/**
+ * Custom {@link BroadcastReceiver} that can talk through a cordova {@link CallbackContext}
+ * @author Frederic GRIFFE from https://www.dynamsoft.com/codepool/how-to-monitor-usb-events-on-android.html
+ */
+public class UsbDetachReceiver extends BroadcastReceiver {
+	// logging tag
+	private final String TAG = UsbDetachReceiver.class.getSimpleName();
+	// cordova callback context to notify the success/error to the cordova app
+	private CallbackContext callbackContext;
+	// cordova activity to use it to unregister this broadcast receiver
+	private Activity activity;
+	
+	/**
+	 * Custom broadcast receiver that will handle the cordova callback context
+	 * @param callbackContext
+	 * @param activity
+	 */
+	public UsbDetachReceiver(CallbackContext callbackContext, Activity activity) {
+		this.callbackContext = callbackContext;
+		this.activity = activity;
+	}
+
+	
+	/**
+	 * Handle permission answer
+	 * @param context
+	 * @param intent
+	 * @see android.content.BroadcastReceiver#onReceive(android.content.Context, android.content.Intent)
+	 */
+	@Override
+	public void onReceive(Context context, Intent intent) {
+		String action = intent.getAction();
+		if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+				Log.d(TAG, "USB Device detached");
+				callbackContext.success("USB Device detached");
+		} 
+	}
+}	

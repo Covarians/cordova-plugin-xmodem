@@ -43,6 +43,8 @@ public class Serial extends CordovaPlugin {
 	// logging tag
 	private final String TAG = Serial.class.getSimpleName();
 	// actions definitions
+	private static final String ACTION_ATTACH_CALLBACK = "registerAttachCB";
+	private static final String ACTION_DETACH_CALLBACK = "registerDetachCB";
 	private static final String ACTION_REQUEST_PERMISSION = "requestPermission";
 	private static final String ACTION_OPEN = "openSerial";
 	private static final String ACTION_READ = "readSerial";
@@ -106,6 +108,17 @@ public class Serial extends CordovaPlugin {
 	public boolean execute(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
 		Log.d(TAG, "Action: " + action);
 		JSONObject arg_object = args.optJSONObject(0);
+		
+		// USB device attach callback
+		if (ACTION_ATTACH_CALLBACK.equals(action)) {
+			registerAttachCB(callbackContext);
+			return true;
+		}
+		// USB device attach callback
+		if (ACTION_DETACH_CALLBACK.equals(action)) {
+			registerDetachCB(callbackContext);
+			return true;
+		}
 		// request permission
 		if (ACTION_REQUEST_PERMISSION.equals(action)) {
 			JSONObject opts = arg_object.has("opts")? arg_object.getJSONObject("opts") : new JSONObject();
@@ -148,6 +161,46 @@ public class Serial extends CordovaPlugin {
 		// the action doesn't exist
 		return false;
 	}
+
+
+	/**
+	 * Request to get the ATTACH/DETACH receiver to the application
+	 * @param callbackContext the cordova {@link CallbackContext}
+	 */
+	private void registerAttachCB(final CallbackContext callbackContext) {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+
+				// Use broadcast receivers to register the events of attaching and detaching USB devices  
+				UsbAttachReceiver attReceiver = new UsbAttachReceiver ();
+
+				// Bind corresponding intent filters with broadcast receivers 
+				IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+				cordova.getActivity().registerReceiver(attReceiver , filter);
+			}
+		}
+	}
+
+	/**
+	 * Request to get the ATTACH/DETACH receiver to the application
+	 * @param callbackContext the cordova {@link CallbackContext}
+	 */
+	private void registerDetachCB(final CallbackContext callbackContext) {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+
+				// Use broadcast receivers to register the events of detaching USB devices  
+				UsbDetachReceiver detReceiver = new UsbDetachReceiver ();
+
+				// Bind corresponding intent filters with broadcast receivers 
+				IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED);
+				cordova.getActivity().registerReceiver(detReceiver , filter);
+			}
+		}
+	}
+
+
+
 
 	/**
 	 * Request permission the the user for the app to use the USB/serial port
@@ -625,3 +678,4 @@ public class Serial extends CordovaPlugin {
 		this.addProperty(obj, key, string);
 	}
 }
+
