@@ -207,6 +207,7 @@ public class Serial extends CordovaPlugin {
 	 * @param callbackContext the cordova {@link CallbackContext}
 	 */
 	private void requestPermission(final JSONObject opts, final CallbackContext callbackContext) {
+		Log.d(TAG, "Registering USB Permission callback");
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
 				// get UsbManager from Android
@@ -256,7 +257,8 @@ public class Serial extends CordovaPlugin {
 					driver = availableDrivers.get(0);
 					UsbDevice device = driver.getDevice();
 					// create the intent that will be used to get the permission
-					PendingIntent pendingIntent = PendingIntent.getBroadcast(cordova.getActivity(), 0, new Intent(UsbBroadcastReceiver.USB_PERMISSION), 0);
+					// WARNING ANDROID12 compatibility : PendingIntent.FLAG_MUTABLE 
+					PendingIntent pendingIntent = PendingIntent.getBroadcast(cordova.getActivity(), 0, new Intent(UsbBroadcastReceiver.USB_PERMISSION), PendingIntent.FLAG_MUTABLE);
 					// and a filter on the permission we ask
 					IntentFilter filter = new IntentFilter();
 					filter.addAction(UsbBroadcastReceiver.USB_PERMISSION);

@@ -1,8 +1,8 @@
-# MODIFICATIONS TO CORDOVARDUINO
+# MODIFICATIONS TO CORDOVARDUINO PLUGIN
 
 ## 1. Modifications to file Serial.java 
 This file is located in .\src\android\com\covarians\cordova\serial
-and the copied to .\platforms\android\app\src\main\java\com\covarians\cordova\serial
+and copied to .\platforms\android\app\src\main\java\com\covarians\cordova\serial
 
 It is also required to change the package name of this file and of UsbBroadcastReceiver.java to include the name of the directory. 
 
@@ -57,9 +57,131 @@ It is also required to change the package name of this file and of UsbBroadcastR
 				if (port == null) {
 ````
 
-## 2 Modification du fichier config.xml
-Ces modifications du plugin permettent d'ajouter automatiquement des éléments à AndroidManifest.xml ainsi qu'un fichier device_filter.xml dans le répertoire res\xml. Le modèle du fichier est dans la racine du plugin.
-Ces modifications permettent d'éviter la fenêtre de demande de permission quand on veut utiliser l'USB
+### 1.4 Add the mutability flag in PendingIntent for Android12 compatibility
+
+````java
+// create the intent that will be used to get the permission
+					// WARNING ANDROID12 compatibility : PendingIntent.FLAG_MUTABLE 
+					PendingIntent pendingIntent = PendingIntent.getBroadcast(cordova.getActivity(), 0,
+						new Intent(UsbBroadcastReceiver.USB_PERMISSION), PendingIntent.FLAG_MUTABLE);
+````
+
+
+## 2 Addition of the USB Attach/Detach Events
+This is to detect the attach/detach event of a USB device to the phone.
+
+### Two commands are added to the serial.js file to register the events callbacks
+
+````js
+    registerAttachCB: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'registerAttachCB',
+            []
+        );
+    },
+    registerDetachCB: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'registerDetachCB',
+            []
+        );
+    },
+````
+
+### These commands will call commands in the Serial.java file
+
+````java
+		// USB device attach callback
+		if (ACTION_ATTACH_CALLBACK.equals(action)) {
+			registerAttachCB(callbackContext);
+			return true;
+		}
+		// USB device attach callback
+		if (ACTION_DETACH_CALLBACK.equals(action)) {
+			registerDetachCB(callbackContext);
+			return true;
+		}
+````
+
+Which in turn will call the functions to register the events :
+
+````java
+	/**
+	 * Request to get the ATTACH/DETACH receiver to the application
+	 * @param callbackContext the cordova {@link CallbackContext}
+	 */
+	private void registerAttachCB(final CallbackContext callbackContext) {
+		Log.d(TAG, "Registering USB Attach callback");
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				// Bind corresponding intent filters with broadcast receivers 
+				IntentFilter filter = new IntentFilter();
+				filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+				// Use broadcast receivers to register the events of attaching USB devices  
+				UsbBroadcastReceiver receiver = new UsbBroadcastReceiver(callbackContext, cordova.getActivity());
+				cordova.getActivity().registerReceiver(receiver , filter);
+			}
+		});
+	}
+
+	/**
+	 * Request to get the ATTACH/DETACH receiver to the application
+	 * @param callbackContext the cordova {@link CallbackContext}
+	 */
+	private void registerDetachCB(final CallbackContext callbackContext) {
+		Log.d(TAG, "Registering USB Detach callback");
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				// Bind corresponding intent filters with broadcast receivers 
+				IntentFilter filter = new IntentFilter();
+				filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+				// Use broadcast receivers to register the events of detaching USB devices  
+				UsbBroadcastReceiver receiver = new UsbBroadcastReceiver(callbackContext, cordova.getActivity());
+				cordova.getActivity().registerReceiver(receiver , filter);
+			}
+		});
+	}
+````
+
+### The onReceive function will catch the events and execute the callbacks.
+
+````java
+	@Override
+	public void onReceive(Context context, Intent intent) {
+		String action = intent.getAction();
+		Log.d(TAG, "Received Action " + action);
+		
+		
+		...
+
+		
+		} else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+			Log.d(TAG, "USB Device attached");
+			callbackContext.success("USB Device attached");
+			// unregister the broadcast receiver since it's no longer needed
+			// activity.unregisterReceiver(this);
+		}
+		if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+			Log.d(TAG, "USB Device detached");
+			callbackContext.success("USB Device detached");
+			// unregister the broadcast receiver since it's no longer needed
+			// activity.unregisterReceiver(this);
+		}  
+	}	
+}
+````
+
+
+
+## 2 Modification of config.xml
+These modification will be applied to the host application config.xml which will be in turn applied to the AndroidManifest.xml
+The device_filter.xml will be also copied to res/xml folder of the application.
+These modification enable to avoid showing the USB permission request to the user when pluging a device to the phone.
 
 ````xml
         <config-file target="AndroidManifest.xml" parent="/manifest/application/activity">
@@ -76,17 +198,19 @@ Ces modifications permettent d'éviter la fenêtre de demande de permission quan
 
 
 ## 2 Update of usbseriallibrary.jar
-Mise en place de la dernière release de cette library.
+Process to upgrade this library to it's latest release:
 
-Méthode pour mettre à jour cette librairie:
-- cloner le repo https://github.com/mik3y/usb-serial-for-android
-- ouvrir le dossier du projet dans Android Studio
-- aller dans  File > Settings > Build, Execution, Deployment > Build Tools > Gradle
-- vérifier que Gradle JDK est bien sur la version 11 de Android JDK
-- puis faire Build > Make project dans l'écran principal
-- la librairie est le fichier classes.jar dans /usbSerialForAndroid/build/intermediates/runtime_library_classes_jar/debug/
-- renommer le fichier classes.jar en usbseriallibrary.jar
-- recopier ce fichier dans le répertoire /lib du présent projet et écraser l'ancienne version
+- clone  repo https://github.com/mik3y/usb-serial-for-android
+- open project folder in Android Studio
+- go to  File > Settings > Build, Execution, Deployment > Build Tools > Gradle
+- check Gradle JDK is on version 11 of Android JDK
+- do Build > Make project in main window
+- the library is the classes.jar file in /usbSerialForAndroid/build/intermediates/runtime_library_classes_jar/debug/
+- rename classes.jar to usbseriallibrary.jar
+- and copy it to the  /lib folder thus replacing the previor version
+- upodate the version of the plugin in package.json and plugin.xml
+- push to Github
+- uninstall/install the plugin in the application using it.
 
 
 ## 3 Update of package.json
