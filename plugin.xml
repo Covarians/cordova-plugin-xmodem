@@ -28,7 +28,7 @@
         </config-file>
         <source-file src="src/android/com/covarians/cordova/serial/Serial.java" target-dir="src/com/covarians/cordova/serial" />
         <source-file src="src/android/com/covarians/cordova/serial/UsbBroadcastReceiver.java" target-dir="src/com/covarians/cordova/serial" />
-        <!-- Ressource file to declare USB divices for filter intent -->
+        <!-- Ressource file to declare USB devices for filter intent -->
         <resource-file src="device_filter.xml" target="res/xml/device_filter.xml" />
         <lib-file src="lib/usbseriallibrary.jar" arch="device" />
     </platform>
