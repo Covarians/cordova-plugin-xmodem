@@ -168,15 +168,15 @@ public class Serial extends CordovaPlugin {
 	 * @param callbackContext the cordova {@link CallbackContext}
 	 */
 	private void registerAttachCB(final CallbackContext callbackContext) {
+		Log.d(TAG, "Registering USB Attach callback");
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
-
-				// Use broadcast receivers to register the events of attaching and detaching USB devices  
-				UsbAttachReceiver attReceiver = new UsbAttachReceiver ();
-
 				// Bind corresponding intent filters with broadcast receivers 
-				IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
-				cordova.getActivity().registerReceiver(attReceiver , filter);
+				IntentFilter filter = new IntentFilter();
+				filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+				// Use broadcast receivers to register the events of attaching USB devices  
+				UsbBroadcastReceiver receiver = new UsbBroadcastReceiver(callbackContext, cordova.getActivity());
+				cordova.getActivity().registerReceiver(receiver , filter);
 			}
 		});
 	}
@@ -186,15 +186,15 @@ public class Serial extends CordovaPlugin {
 	 * @param callbackContext the cordova {@link CallbackContext}
 	 */
 	private void registerDetachCB(final CallbackContext callbackContext) {
+		Log.d(TAG, "Registering USB Detach callback");
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
-
-				// Use broadcast receivers to register the events of detaching USB devices  
-				UsbDetachReceiver detReceiver = new UsbDetachReceiver ();
-
 				// Bind corresponding intent filters with broadcast receivers 
-				IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED);
-				cordova.getActivity().registerReceiver(detReceiver , filter);
+				IntentFilter filter = new IntentFilter();
+				filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+				// Use broadcast receivers to register the events of detaching USB devices  
+				UsbBroadcastReceiver receiver = new UsbBroadcastReceiver(callbackContext, cordova.getActivity());
+				cordova.getActivity().registerReceiver(receiver , filter);
 			}
 		});
 	}
