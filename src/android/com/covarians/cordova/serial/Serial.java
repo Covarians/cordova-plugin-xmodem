@@ -178,7 +178,7 @@ public class Serial extends CordovaPlugin {
 				IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
 				cordova.getActivity().registerReceiver(attReceiver , filter);
 			}
-		}
+		})
 	}
 
 	/**
@@ -196,7 +196,7 @@ public class Serial extends CordovaPlugin {
 				IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED);
 				cordova.getActivity().registerReceiver(detReceiver , filter);
 			}
-		}
+		})
 	}
 
 
