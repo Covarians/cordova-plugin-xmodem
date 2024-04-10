@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-xmodem",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Cordova plugin to exchange data with android devices through the USB serial port and XMODEM 1K",
   "cordova": {
     "id": "cordova-plugin-xmodem",
@@ -25,5 +25,10 @@
   "bugs": {
     "url": "https://github.com/Covarians/cordova-plugin-xmodem/issues"
   },
-  "homepage": "https://github.com/Covarians/cordova-plugin-xmodem#readme"
+  "homepage": "https://github.com/Covarians/cordova-plugin-xmodem#readme",
+  "engines": {
+    "cordovaDependencies": {
+        "0.1.4": { "cordova-android": ">8.0.0"}
+    }
+}
 }
