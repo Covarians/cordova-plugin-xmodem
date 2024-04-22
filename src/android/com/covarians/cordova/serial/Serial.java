@@ -1,4 +1,3 @@
-//package org.apache.cordova.plugin;
 package com.covarians.cordova.serial;  //TODO Verifier
 
 import java.io.FileOutputStream;
@@ -66,19 +65,29 @@ public class Serial extends CordovaPlugin {
 	private UsbSerialDriver driver;
 	// The serial port that will be used in this plugin
 	private UsbSerialPort port;
+
 	// Read buffer, and read params
 	private static final int READ_WAIT_MILLIS = 200;
 	private static final int BUFSIZ = 4096;
 	private final ByteBuffer mReadBuffer = ByteBuffer.allocate(BUFSIZ);
-
+	private final byte[] command = new byte[1];
+	
 	// Constants required for XMODEM
 	private final int XMODEM_MESSAGE_LENGTH = 1029;
 	private final int XMODEM_BLOCK_LENGTH = 1024;
 	private final int XMODEM_MAX_ERRORS = 10;
+
+	// XMODEM commands
+	private final int NOP = 0x00;
+	private final int SOH = 0x01;
+	private final int STX = 0x02;
 	private final int EOT = 0x04;
+	private final int ACK = 0x06;
 	private final int NAK = 0x15;
 	private final int STR = 0x43;  // 'C' char for start of transmission
-    private final int STA = 0x44;  // 'D' to switch to all dataset download (only once)
+	private final int STA = 0x44;  // 'D' to switch to all dataset download (only once)
+	private final int CAN = 0x18;  // not implemented
+	private final int FILLER = 0xFF;
 	
 	// Connection info
 	private int baudRate;
@@ -116,7 +125,7 @@ public class Serial extends CordovaPlugin {
 				@Override
 				public void onNewData(final byte[] data) {
 					if (streamMode) {
-						Serial.this.receiveStreamData(data);
+						Serial.this.onUpdateSerialStream(data);
 					} else {
 						Serial.this.updateReceivedData(data);
 					}
@@ -190,17 +199,17 @@ public class Serial extends CordovaPlugin {
 		// open serial stream : open the serial port and create a file output stream to store the data.
 		else if (ACTION_OPEN_STREAM.equals(action)) {
 			JSONObject opts = arg_object.has("opts")? arg_object.getJSONObject("opts") : new JSONObject();
-			openFileStream(opts, callbackContext);
+			openSerialStream(opts, callbackContext);
 			return true;
 		}
 		// stop serial stream : close the file output stream and the serial port.
 		else if (ACTION_STOP_STREAM.equals(action)) {
-			stopFileStream(callbackContext);
+			stopSerialStream(callbackContext);
 			return true;
 		}
 		// close serial stream : close the serial port and the file output stream.
 		else if (ACTION_CLOSE_STREAM.equals(action)) {
-			closeFileStream(callbackContext);
+			closeSerialStream(callbackContext);
 			return true;
 		}
 
@@ -367,6 +376,7 @@ public class Serial extends CordovaPlugin {
 					}
 
 					Log.d(TAG, "Serial port opened!");
+					Log.d(TAG, "Serial port max packet size:" + port.getReadEndpoint().getMaxPacketSize());
 					callbackContext.success("Serial port opened!");
 				}
 				else {
@@ -816,7 +826,7 @@ public class Serial extends CordovaPlugin {
 				try {
 					Log.d(TAG, "Sending start of transmission command");
 					allDownload = opts.has("allDownload") ? opts.getBoolean("allDownload") : false;
-					byte[] command = new byte[1];
+					
 					// Send the command to switch to all dataset download (only once)
 					if (allDownload) {
 						command[0] = (byte) STA ;
@@ -832,8 +842,14 @@ public class Serial extends CordovaPlugin {
 					callbackContext.error(e.getMessage());
 					return;
 				}
+				catch (JSONException e) {
+					// deal with error
+					Log.d(TAG, e.getMessage());
+					callbackContext.error(e.getMessage());
+					return;
+				}
 				streamMode = true;
-				Log.d(TAG, "File stream started!");
+				Log.d(TAG, "Serial stream started!");
 				callbackContext.success("Serial stream started!");
 				onDeviceStateChange();
 			}
@@ -861,7 +877,7 @@ public class Serial extends CordovaPlugin {
 	 * This file handles the mechanism of the XMODEM Rx Protocole 
 	 * @param msg the array of received bytes
 	 */
-	private void updateXmodemData(byte[] msg) {
+	private void onUpdateSerialStream(byte[] msg) {
 		// I the callback has not been registered, return
 		if( readCallback == null ) { return; }
 		Log.d(TAG, "Received bytes1:" + msg.length + " Position:" + mReadBuffer.position() + " Capa: " + mReadBuffer.capacity());
@@ -888,7 +904,7 @@ public class Serial extends CordovaPlugin {
 				readCallback.sendPluginResult(result);
 			} else 	if (msg[0] == NAK) {
 				// Test for transmission error (NAK)
-				Log.d(TAG, "Recieved NAK");
+				Log.d(TAG, "Received NAK");
 				tryCounter++;
 				// resend command
 				try {
@@ -921,7 +937,6 @@ public class Serial extends CordovaPlugin {
 					fileStream.write(data);
 
 					// Send ACK to get next block
-					byte[] command = new byte[1];
 					command[0] = stopStreamRequired ? (byte) CAN : (byte) ACK ;
 					port.write(command, 1000);
 					// Increment block number
@@ -982,7 +997,7 @@ public class Serial extends CordovaPlugin {
 		});
 	}
 
-	/******************************************************************************
+/******************************************************************************
  *  Compilation:  javac CRC16.java
  *  Execution:    java CRC16 s
  *
@@ -999,9 +1014,9 @@ public class Serial extends CordovaPlugin {
  *
  ******************************************************************************/
 
-public class CRC16 {
 
-    public static void main(String[] args) {
+
+    private int calcCRC (String[] args) {
 
         int[] table = {
             0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
@@ -1045,14 +1060,7 @@ public class CRC16 {
             crc = (crc >>> 8) ^ table[(crc ^ b) & 0xff];
         }
 
-        StdOut.println("CRC16 = " + Integer.toHexString(crc));
-
+		return crc;
     }
-
-}
-
-
-
-
 }
 
