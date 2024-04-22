@@ -22,6 +22,15 @@ var serial = {
             [{'opts': opts}]
         );
     },
+    openStream: function(opts, successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'openSerialStream',
+            [{'opts': opts}]
+        );
+    },
     write: function(data, successCallback, errorCallback) {
         cordova.exec(
             successCallback,
@@ -55,6 +64,15 @@ var serial = {
             errorCallback,
             'Serial',
             'closeSerial',
+            []
+        );
+    },
+    closeStream: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'closeSerialStream',
             []
         );
     },

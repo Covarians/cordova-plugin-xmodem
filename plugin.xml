@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
+<plugin 
+    xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     id="cordova-plugin-xmodem"
     version="0.1.4">
     <name>Cordova XMODEM plugin</name>
@@ -28,11 +30,12 @@
         </config-file>
         <source-file src="src/android/com/covarians/cordova/serial/Serial.java" target-dir="src/com/covarians/cordova/serial" />
         <source-file src="src/android/com/covarians/cordova/serial/UsbBroadcastReceiver.java" target-dir="src/com/covarians/cordova/serial" />
+        <framework src="org.apache.cordova" />
         <!-- Ressource file to declare USB devices for filter intent -->
         <resource-file src="device_filter.xml" target="res/xml/device_filter.xml" />
         <lib-file src="lib/usbseriallibrary.jar" arch="device" />
-    </platform>
 
+    </platform>
     <!-- ubuntu -->
     <platform name="ubuntu">
         <header-file src="src/ubuntu/serial.h" />

@@ -25,5 +25,10 @@
   "bugs": {
     "url": "https://github.com/Covarians/cordova-plugin-xmodem/issues"
   },
-  "homepage": "https://github.com/Covarians/cordova-plugin-xmodem#readme"
+  "homepage": "https://github.com/Covarians/cordova-plugin-xmodem#readme",
+  "engines": {
+    "cordovaDependencies": {
+        "0.1.4": { "cordova-android": ">8.0.0"}
+    }
+}
 }
