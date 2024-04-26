@@ -13,6 +13,29 @@ var serial = {
             [{'opts': opts}]
         );
     },
+    requestPermissionAexAir: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'requestPermissionAexAir',
+            []
+        );
+    },
+    d2xxOpen: function(opts, successCallback, errorCallback) {
+        if (typeof opts === 'function') {  //user did not pass opts
+          errorCallback = successCallback;
+          successCallback = opts;
+          opts = {};
+        }
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'd2xxOpen',
+            [{'opts': opts}]
+        );
+    },
     open: function(opts, successCallback, errorCallback) {
         cordova.exec(
             successCallback,
@@ -22,12 +45,12 @@ var serial = {
             [{'opts': opts}]
         );
     },
-    openStream: function(opts, successCallback, errorCallback) {
+    startSerialStream: function(opts, successCallback, errorCallback) {
         cordova.exec(
             successCallback,
             errorCallback,
             'Serial',
-            'openSerialStream',
+            'startSerialStream',
             [{'opts': opts}]
         );
     },

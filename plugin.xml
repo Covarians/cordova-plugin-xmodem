@@ -33,6 +33,7 @@
         <!-- Ressource file to declare USB devices for filter intent -->
         <resource-file src="device_filter.xml" target="res/xml/device_filter.xml" />
         <lib-file src="lib/usbseriallibrary.jar" arch="device" />
+        <lib-file src="lib/d2xx.jar" arch="device" />
 
     </platform>
     <!-- ubuntu -->

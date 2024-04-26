@@ -3,6 +3,7 @@ package com.covarians.cordova.serial;  //TODO Verifier
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,6 +36,11 @@ import android.hardware.usb.UsbManager;
 import android.util.Base64;
 import android.util.Log;
 
+import com.ftdi.j2xx.D2xxManager;
+import com.ftdi.j2xx.D2xxManager.D2xxException;
+import com.ftdi.j2xx.FT_Device;
+import com.ftdi.j2xx.D2xxManager.DriverParameters;
+import com.ftdi.j2xx.D2xxManager.FtDeviceInfoListNode;
 
 /**
  * Cordova plugin to communicate with the android serial port
@@ -54,17 +60,37 @@ public class Serial extends CordovaPlugin {
 	private static final String ACTION_WRITE_HEX = "writeSerialHex";
 	private static final String ACTION_CLOSE = "closeSerial";
 	
-	private static final String ACTION_OPEN_STREAM = "openSerialStream";
+	private static final String ACTION_REQUEST_PERMISSION_AEXAIR = "requestPermissionAexAir";
+	private static final String ACTION_D2XX_OPEN = "d2xxOpen";
+	private static final String ACTION_START_STREAM = "startSerialStream";
 	private static final String ACTION_STOP_STREAM = "stopSerialStream";
 	private static final String ACTION_CLOSE_STREAM = "closeSerialStream";
 
 
 	// UsbManager instance to deal with permission and opening
 	private UsbManager manager;
+	// UsbDevice instance to deal with the connected device
+	private UsbDevice USBDev = null;
 	// The current driver that handle the serial port
 	private UsbSerialDriver driver;
 	// The serial port that will be used in this plugin
 	private UsbSerialPort port;
+	
+	// D2xxManager instance to deal with FTDI devices
+	private D2xxManager d2xxManager;
+	// FT_Device instance to deal with FTDI devices
+	private FT_Device ftDevice;
+	// Driver parameters for FTDI devices
+	private DriverParameters driverParameters;
+	// Maximum buffer size, min: 64, max: 256 * 1024, default: 16 * 1024
+	private static final int MAX_BUFFER_SIZE = 16 * 1024;
+	// Maximum transfer size, min: 64, max: 256 * 1024, default: 16 * 1024
+	private static final int MAX_TRANSFER_SIZE = 16 * 1024;
+	// Buffer number, min: 2, max: 16, default: 16
+	private static final int BUFFER_NUMBER = 16;
+	// Read timeout (ms), 0 for infinite, default: 5000ms
+	private static final int READ_TIMEOUT = 5000;
+
 
 	// Read buffer, and read params
 	private static final int READ_WAIT_MILLIS = 200;
@@ -195,11 +221,22 @@ public class Serial extends CordovaPlugin {
 			registerReadCallback(callbackContext);
 			return true;
 		}
-
-		// open serial stream : open the serial port and create a file output stream to store the data.
-		else if (ACTION_OPEN_STREAM.equals(action)) {
+		
+		// open serial stream : open the FTDI device using D2XX driver and set its parameters.
+		else if (ACTION_REQUEST_PERMISSION_AEXAIR.equals(action)) {
+			requestPermissionAexAir(callbackContext);
+			return true;
+		}
+		// Open D2XX : open the FTDI device using D2XX driver and set its parameters.
+		else if (ACTION_D2XX_OPEN.equals(action)) {
 			JSONObject opts = arg_object.has("opts")? arg_object.getJSONObject("opts") : new JSONObject();
-			openSerialStream(opts, callbackContext);
+			d2xxOpen(opts, callbackContext);
+			return true;
+		}
+		// start serial stream : start transfering data and create a file output stream to store the data.
+		else if (ACTION_START_STREAM.equals(action)) {
+			JSONObject opts = arg_object.has("opts")? arg_object.getJSONObject("opts") : new JSONObject();
+			startSerialStream(opts, callbackContext);
 			return true;
 		}
 		// stop serial stream : close the file output stream and the serial port.
@@ -389,7 +426,7 @@ public class Serial extends CordovaPlugin {
 	}
 
 
-	
+
 
 	/**
 	 * Write on the serial port
@@ -749,112 +786,385 @@ public class Serial extends CordovaPlugin {
 
 	/********************** SERIAL STREAM FUNCTIONS  ***************************************/
 
-	
 	/**
-	 * Open a file stream to store the incoming XMODEM data
-	 * @param opts a {@link JSONObject} containing the connection parameters
+	 * Find attached USB devices that are FT_Device and request permission for UsbBroadcastReceiver.
+	 * @param callbackContext the cordova {@link CallbackContext}
 	 */
-	private void openSerialStream(final JSONObject opts, final CallbackContext callbackContext) {
+	private void requestPermissionAexAir(final CallbackContext callbackContext) {
+		Log.d(TAG, "Registering USB Permission callback");
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
-				// Reset all stream variables
-				tryCounter = 0;
-				blockNumber = 0;
-				stopStreamRequired = false;
+				// Get UsbManager from Android
+				manager = (UsbManager) cordova.getActivity().getSystemService(Context.USB_SERVICE);
 
-				UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
-				if (connection == null) { 
-					Log.d(TAG, "Cannot connect to the device!");
-					callbackContext.error("Cannot connect to the device!");
-					return;
-				}
-				// get first port and open it
-				port = driver.getPorts().get(0);
-				try {
-					// get connection params or the default values
-					baudRate = opts.has("baudRate") ? opts.getInt("baudRate") : 9600;
-					dataBits = opts.has("dataBits") ? opts.getInt("dataBits") : UsbSerialPort.DATABITS_8;
-					stopBits = opts.has("stopBits") ? opts.getInt("stopBits") : UsbSerialPort.STOPBITS_1;
-					parity = opts.has("parity") ? opts.getInt("parity") : UsbSerialPort.PARITY_NONE;
-					setDTR = opts.has("dtr") && opts.getBoolean("dtr");
-					setRTS = opts.has("rts") && opts.getBoolean("rts");
-					// Sleep On Pause defaults to true
-					sleepOnPause = opts.has("sleepOnPause") ? opts.getBoolean("sleepOnPause") : true;
+				// Get the list of attached USB devices
+				HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
 
-					port.open(connection);
-					port.setParameters(baudRate, dataBits, stopBits, parity);
-					if (setDTR) port.setDTR(true);
-					if (setRTS) port.setRTS(true);
-				}
-				catch (IOException  e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
-					return;
-				}
-				catch (JSONException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
+				// Check if the deviceList is empty
+				if (deviceList.isEmpty()) {
+					// Log that no devices have been found
+					Log.d(TAG, "No device found");
+					// Notify the callbackContext that no devices have been found
+					callbackContext.error("No device found");
+					// Return from the method
 					return;
 				}
 
-				// Open the file stream
-				try {
-					// get connection params or the default values
-					String filePath = opts.has("filePath") ? opts.getString("filePath") : "/sdcard/Download/serial.bin";
-					// Open the file stream
-					fileStream = new FileOutputStream(filePath);
-				}
-				catch (IOException  e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
-					return;
-				}
-				catch (JSONException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
+				// Get corresponding USBdevice if an AexAir is connected
+				USBDev = null;
+
+				// for (USBDev : deviceList.values()) {
+				// 	if (device.getManufacturerName().toLowerCase().contains("covarians")) {
+				// 		Log.d(TAG, "Found a Covarians device");
+				// 		for (int i = 0; i < device.getInterfaceCount(); i++) {
+				// 			if (device.getInterface(i).getName().toLowerCase().contains("aexair")) {
+				// 				Log.d(TAG, "Found an AexAir device");
+				// 				break;
+				// 			}
+				// 		}
+				// 		if (USBDev != null) {
+				// 			break;
+				// 		}
+				// 	}
+				// }
+				
+				// Get the first device in deviceList
+				USBDev = deviceList.values().iterator().next();
+
+
+				if (USBDev == null) {
+					Log.d(TAG, "No AexAir device found");
+					callbackContext.error("No AexAir device found");
 					return;
 				}
 
-				// Register the read callback that will be used to send back data to the cordova app
-				readCallback = callbackContext;
-
-				// Send start of transmission command
-				try {
-					Log.d(TAG, "Sending start of transmission command");
-					allDownload = opts.has("allDownload") ? opts.getBoolean("allDownload") : false;
-					
-					// Send the command to switch to all dataset download (only once)
-					if (allDownload) {
-						command[0] = (byte) STA ;
-						port.write(command, 1000);
-					}
-					// Send the command to start the XMODEM transfer
-					command[0] = (byte) STR;
-					port.write(command, 1000);
-				}
-				catch (IOException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
-					return;
-				}
-				catch (JSONException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
-					return;
-				}
-				streamMode = true;
-				Log.d(TAG, "Serial stream started!");
-				callbackContext.success("Serial stream started!");
-				onDeviceStateChange();
+				// WARNING ANDROID12 compatibility : PendingIntent.FLAG_MUTABLE 
+				PendingIntent pendingIntent = PendingIntent.getBroadcast(cordova.getActivity(), 0, new Intent(UsbBroadcastReceiver.USB_PERMISSION), PendingIntent.FLAG_MUTABLE);
+				// and a filter on the permission we ask
+				IntentFilter filter = new IntentFilter();
+				filter.addAction(UsbBroadcastReceiver.USB_PERMISSION);
+				// this broadcast receiver will handle the permission results
+				UsbBroadcastReceiver usbReceiver = new UsbBroadcastReceiver(callbackContext, cordova.getActivity());
+				cordova.getActivity().registerReceiver(usbReceiver, filter);
+				// finally ask for the permission
+				manager.requestPermission(USBDev, pendingIntent);
+				// Log that the permission has been requested
+				Log.d(TAG, "Permission requested for FT_Device: " + USBDev.getDeviceName());
 			}
 		});
 	}
+
+	
+	/**
+	 * 
+	 * @param opts a {@link JSONObject} containing the connection parameters
+	 */
+	private void d2xxOpen(final JSONObject opts, final CallbackContext callbackContext) {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				// Get the D2xxManager instance
+				try {
+					d2xxManager = D2xxManager.getInstance(cordova.getActivity().getApplicationContext());
+				} catch (D2xxManager.D2xxException e) {
+					e.printStackTrace();
+					// Log the caught error
+					Log.d(TAG, e.getMessage());
+				}
+
+				// Check if the D2xxManager instance is null
+				if (d2xxManager == null) {
+					// Log that the D2xxManager instance is null
+					Log.d(TAG, "D2xxManager is null");
+					// Notify the callbackContext that the D2xxManager instance is null
+					callbackContext.error("D2xxManager is null");
+					// Return from the method
+					return;
+				}
+
+				// Log that the D2xxManager instance has been created
+				Log.d(TAG, "D2xxManager created");
+				
+				driverParameters = new D2xxManager.DriverParameters();
+				driverParameters.setMaxBufferSize(MAX_BUFFER_SIZE);
+				driverParameters.setMaxTransferSize(MAX_TRANSFER_SIZE);
+				driverParameters.setBufferNumber(BUFFER_NUMBER);
+				driverParameters.setReadTimeout(READ_TIMEOUT);
+
+				// Log parameters set
+				Log.d(TAG, "Parameters set");
+
+				// ftDevice = d2xxManager.openByUsbDevice(cordova.getActivity(), USBDev, driverParameters);
+				// Create a list of devices
+				d2xxManager.createDeviceInfoList(cordova.getActivity());
+				ftDevice = d2xxManager.openByIndex(cordova.getActivity(), 0, driverParameters);
+				
+				if (ftDevice == null || !ftDevice.isOpen()) {
+					Log.d(TAG, "FT_Device failed to open");
+					callbackContext.error("FT_Device failed to open");
+					return;
+				}
+
+				Log.d(TAG, "Opened FT_Device");
+
+				try {
+					// get connection params or the default values
+					baudRate = opts.has("baudRate") ? opts.getInt("baudRate") : 9600;
+					dataBits = opts.has("dataBits") ? opts.getInt("dataBits") : D2xxManager.FT_DATA_BITS_8;
+					stopBits = opts.has("stopBits") ? opts.getInt("stopBits") : D2xxManager.FT_STOP_BITS_1;
+					parity = opts.has("parity") ? opts.getInt("parity") : D2xxManager.FT_PARITY_NONE;
+					setDTR = opts.has("dtr") && opts.getBoolean("dtr");
+					setRTS = opts.has("rts") && opts.getBoolean("rts");
+					// Sleep On Pause defaults to true
+					// sleepOnPause = opts.has("sleepOnPause") ? opts.getBoolean("sleepOnPause") : true;
+
+					ftDevice.setBaudRate(baudRate);
+					ftDevice.setDataCharacteristics((byte)dataBits, (byte)stopBits, (byte)parity);
+					
+					Log.d(TAG, "BaudRate and data characteristics set");
+					// DTR / RTS ?
+				}
+				catch (JSONException e) {
+					// deal with error
+					Log.d(TAG, e.getMessage());
+					callbackContext.error(e.getMessage());
+				}
+				// onDeviceStateChange(); // ??
+				callbackContext.success("Connected to AexAir");
+			}
+		});
+	}
+
+	
+
+
+		/**
+	 * Open a file stream to store the incoming XMODEM data
+	 * @param opts a {@link JSONObject} containing the connection parameters
+	 */
+	private void startSerialStream(final JSONObject opts, final CallbackContext callbackContext) {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				if (ftDevice == null || !ftDevice.isOpen()) {
+					Log.d(TAG, "FT_Device is not open");
+					callbackContext.error("FT_Device is not open");
+					return;
+				}
+
+				ftDevice.setLatencyTimer((byte)16);
+				// ftDevice.setReadTimeout(1000);
+				
+				Log.d(TAG, "Latency timer set");
+
+				ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+
+				byte[] c_char = new byte[]{0x43};
+				byte[] d_char = new byte[]{0x44};
+				// byte STX = 0x02;
+				// byte EOT = 0x04;
+				// byte ACK = 0x06;
+				// byte NAK = 0x15;
+				byte[] b_ACK = new byte[]{ACK};
+				byte[] b_NAK = new byte[]{NAK};
+
+				byte[] data = new byte[1029];
+				byte[] bigBuff = new byte[200000000];
+
+				boolean EndOfTransferFlag = false;
+
+				int readBytes = 0;
+				int success = 0;
+				int retries = 0;
+				int total_errors = 0;
+				int maxRetries = 5;
+				int position = 0;
+				int block_number = 0;
+				int queue = 0;
+
+				ftDevice.write(d_char);
+				// Send 'C' to start the transfer
+				int bytesWritten = ftDevice.write(c_char);
+				Log.d(TAG, "Bytes written: " + bytesWritten);
+				
+
+				while (!(EndOfTransferFlag || stopStreamRequired)) {
+					// Try and read 1029 bytes (a complete XMODEM-1K block).
+					readBytes = ftDevice.read(data, 1029, 500);
+					Log.d(TAG, "Received bytes: " + readBytes);
+					// If can't read 1029 bytes, read 1.
+					if (readBytes <= 0) {
+						queue = ftDevice.getQueueStatus();
+						Log.d(TAG, "Queue: " + queue);
+						if (queue == 1) {
+							readBytes = ftDevice.read(data, 1, 500);
+							if (readBytes > 0) {
+								if (data[0] == EOT) {
+									// End of transmission.
+									EndOfTransferFlag = true;
+									Log.d(TAG, "EOT received, blocks: " + block_number);
+									ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+									ftDevice.write(b_ACK);
+									// Close file ?
+								}
+								else {
+									total_errors += 1;
+									// Error.
+									// Send NAK with a retry counter.
+									if (retries < maxRetries) {
+										retries += 1;
+										Log.d(TAG, "Retry after 1 byte");
+										ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+										ftDevice.write(b_NAK);
+									}
+									else {
+										EndOfTransferFlag = true;
+										success = -2;
+										Log.d(TAG, "Error: 1 byte (not EOT): " + data[0]);
+									}
+								}
+							}
+							else {
+								total_errors += 1;
+								// Error.
+								// Send NAK with a retry counter.
+								if (retries < maxRetries) {
+									retries += 1;
+									Log.d(TAG, "Retry after failing to read 1 byte");
+									ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+									ftDevice.write(b_NAK);
+								}
+								else {
+									EndOfTransferFlag = true;
+									success = -2;
+									Log.d(TAG, "Error: 1 byte read failed");
+								}
+							}
+						}
+						else {
+							total_errors += 1;
+							// ReadBytes < 1029.
+							// Error, request block again by sending NAK.
+							// Send NAK with a retry counter.
+							if (retries < maxRetries) {
+								retries += 1;
+								Log.d(TAG, "Retry After wrong number of bytes read: " + readBytes);
+								ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+								ftDevice.write(b_NAK);
+							}
+							else {
+								EndOfTransferFlag = true;
+								success = -4;
+								Log.d(TAG, "Error: Wrong number of bytes read: " + readBytes);
+								ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+								ftDevice.write(b_NAK);
+							}
+						}
+					}
+					else {
+						if (true) {	// Check block here.
+							// Copy the contents of sourceArray into destinationArray at position 'position'
+							// Save in file instead of array.
+							System.arraycopy(data, 0, bigBuff, position, 1029); // i2 will be 1024 after validating block. 3 debut 2 fin
+							position += 1029;    // Will be 1024 after validating frame.
+							block_number += 1;
+							Log.d(TAG, "Received block nr " + block_number);
+							ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+							ftDevice.write(b_ACK);
+							retries = 0;
+						}
+						else {
+							total_errors += 1;
+							if (retries < maxRetries) {
+								retries += 1;
+								Log.d(TAG, "Retry After invalid block");
+								ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+								ftDevice.write(b_NAK);
+							}
+							else {
+								EndOfTransferFlag = true;
+								success = -3;
+								Log.d(TAG, "Error: Invalid block block");
+							}
+						}
+					}
+				}
+
+				ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+			}
+		});
+	}
+
+	// /*******************************************************************
+	//  *  receiveBlock(blockNr, blockData, block_size, mode, callback)
+	//  * 
+	//  * @brief Parses the recieved XMODEM block 
+	//  * @param blockNr block number (as 8bit integer)
+	//  * @param blockData incoming block of data
+	//  * @param block_size length of incoming block of data
+	//  * @param mode
+	//  * @param callback function to call once everything has been parsed and is correct
+	//  */
+	// private void receiveBlock(int blockNr, byte[] blockData, int block_size, String mode, final CallbackContext callback) {
+	// 	var cmd = blockData[0];
+	// 	var block = parseInt(blockData[1]);
+	// 	var block_check = parseInt(blockData[2]);
+	// 	var block_crc = (parseInt(blockData[1027]) << 8) | (parseInt(blockData[1028])) ;
+	// 	var crc;
+	// 	var current_block;
+	// 	var checksum_length = (mode == "crc") ? 2 : 1;
+
+	// 	// Check start of Block
+	// 	if (cmd == STX) {
+	// 		// Check block number repeat
+	// 		if ((block + block_check) == 0xFF) {
+	// 			// Check block number sequence
+	// 			if (block === (blockNr % 0x100)) {
+	// 				current_block = blockData.slice(3, blockData.length - checksum_length);
+	// 			}
+	// 			else {
+	// 				Log.d(TAG, "[RECV] - Synch Error Received: " + block + " Expected: " + blockNr);
+	// 				return;
+	// 			}
+	// 		}
+	// 		else {
+	// 			logger('[RECV] - Block integrity check failed!');
+	// 			command = NAK;
+	// 			return;
+	// 		}
+	// 		// Check block length
+	// 		if (current_block.length === block_size) {
+	// 			// Check block CRC
+	// 			crc = crc_ccitt_generic(current_block, current_block.length, CRC_START_XMODEM)
+	// 			if (crc === block_crc) {
+	// 				// Valid block record in buffer
+	// 				command = ACK;
+	// 				callback(current_block);
+	// 				// Copy the contents of sourceArray into destinationArray at position 'position'
+	// 				// Save in file instead of array.
+	// 				System.arraycopy(data, 0, bigBuff, position, 1029); // i2 will be 1024 after validating block. 3 debut 2 fin
+	// 				position += 1029;    // Will be 1024 after validating frame.
+	// 				block_number += 1;
+	// 				Log.d(TAG, "Received block nr " + block_number);
+	// 				ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+	// 				ftDevice.write(b_ACK);
+	// 				retries = 0;
+					
+	// 			} else {
+	// 				logger('[RECV] - Invalid checksum at block ' + blockNumber.toString());
+	// 				command = NAK;
+	// 				return;
+	// 			}
+	// 		}
+	// 		else {
+	// 			logger('[RECV] - Received block size did not match the expected size. Received: ' + current_block.length + ' | Expected: ' + block_size);
+	// 			command = NAK;
+	// 			return;
+	// 		}
+	// 	}
+	// 	else {
+	// 		logger('[RECV] - Block not started with STX!');
+	// 		return;
+	// 	}
+	// };
 
 	/**
 	 * Stop the serial stream
@@ -1063,4 +1373,3 @@ public class Serial extends CordovaPlugin {
 		return crc;
     }
 }
-
