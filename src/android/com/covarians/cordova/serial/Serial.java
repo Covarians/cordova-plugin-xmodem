@@ -1,7 +1,9 @@
 package com.covarians.cordova.serial;  //TODO Verifier
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +37,7 @@ import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.util.Base64;
 import android.util.Log;
+import android.content.Context;
 
 import com.ftdi.j2xx.D2xxManager;
 import com.ftdi.j2xx.D2xxManager.D2xxException;
@@ -62,6 +65,7 @@ public class Serial extends CordovaPlugin {
 	
 	private static final String ACTION_REQUEST_PERMISSION_AEXAIR = "requestPermissionAexAir";
 	private static final String ACTION_D2XX_OPEN = "d2xxOpen";
+	private static final String ACTION_STREAM_CALLBACK = "registerStreamCallback";
 	private static final String ACTION_START_STREAM = "startSerialStream";
 	private static final String ACTION_STOP_STREAM = "stopSerialStream";
 	private static final String ACTION_CLOSE_STREAM = "closeSerialStream";
@@ -98,6 +102,10 @@ public class Serial extends CordovaPlugin {
 	private final ByteBuffer mReadBuffer = ByteBuffer.allocate(BUFSIZ);
 	private final byte[] command = new byte[1];
 	
+	// File varialbles
+	private FileOutputStream fileOutputStream;
+	private String fileName;
+
 	// Constants required for XMODEM
 	private final int XMODEM_MESSAGE_LENGTH = 1029;
 	private final int XMODEM_BLOCK_LENGTH = 1024;
@@ -127,17 +135,20 @@ public class Serial extends CordovaPlugin {
 
 	// XMODEM Stream variables
 	private boolean streamMode = false;
-	private boolean stopStreamRequired = false;
+	private boolean stopRequired = false;
 	private int blockNumber = 0;
 	private int tryCounter = 0;
 
 
 
+
 	// FileStream to store the incoming XMODEM data
 	private FileOutputStream fileStream;
+	private int dnum = 0;
 	
 	// callback that will be used to send back data to the cordova app
 	private CallbackContext readCallback;
+	private CallbackContext streamCallback;
 	
 	// I/O manager to handle new incoming serial data
 	private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
@@ -231,6 +242,12 @@ public class Serial extends CordovaPlugin {
 		else if (ACTION_D2XX_OPEN.equals(action)) {
 			JSONObject opts = arg_object.has("opts")? arg_object.getJSONObject("opts") : new JSONObject();
 			d2xxOpen(opts, callbackContext);
+			return true;
+		}
+
+		// Register stream callback
+		else if (ACTION_STREAM_CALLBACK.equals(action)) {
+			registerStreamCallback(callbackContext);
 			return true;
 		}
 		// start serial stream : start transfering data and create a file output stream to store the data.
@@ -784,7 +801,7 @@ public class Serial extends CordovaPlugin {
 
 
 
-	/********************** SERIAL STREAM FUNCTIONS  ***************************************/
+	/********************** SERIAL XMODEM STREAM FUNCTIONS  ***************************************/
 
 	/**
 	 * Find attached USB devices that are FT_Device and request permission for UsbBroadcastReceiver.
@@ -934,7 +951,24 @@ public class Serial extends CordovaPlugin {
 		});
 	}
 
-	
+		/**
+	 * Register callback for xmodem stream to get progress information
+	 * @param callbackContext the cordova {@link CallbackContext}
+	 */
+	private void registerStreamCallback(final CallbackContext callbackContext) {
+		cordova.getThreadPool().execute(new Runnable() {
+			public void run() {
+				Log.d(TAG, "Registering Stream Callback");
+				streamCallback = callbackContext;
+				JSONObject returnObj = new JSONObject();
+				addProperty(returnObj, "blockNumber", 5);
+				// Keep the callback
+				PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, returnObj);
+				pluginResult.setKeepCallback(true);
+				callbackContext.sendPluginResult(pluginResult);
+			}
+		});
+	}
 
 
 		/**
@@ -949,6 +983,36 @@ public class Serial extends CordovaPlugin {
 					callbackContext.error("FT_Device is not open");
 					return;
 				}
+
+				// get connection params or the default values
+				try {
+
+					// get start of upload -1 for eldest data, 0 for new data only
+					dnum = opts.has("start") ? opts.getInt("start") : 0;
+
+					// get connection params or the default values
+					fileName = opts.has("fileName") ? opts.getString("fileName") : "noname.bin";
+					File path = cordova.getActivity().getExternalFilesDir(null);
+
+					fileOutputStream = new FileOutputStream(new File(path, fileName));
+					// continue with the code...
+					Log.d(TAG, "File opened: " + fileName);
+					// DTR / RTS ?
+				}
+				catch (JSONException e) {
+					// deal with error
+					Log.d(TAG, e.getMessage());
+					callbackContext.error(e.getMessage());
+				}
+				catch (FileNotFoundException e) {
+					// deal with error
+					Log.d(TAG, e.getMessage());
+					callbackContext.error(e.getMessage());
+				}
+				Log.d(TAG, "File opened: " + fileName);
+				// DTR / RTS ?
+				
+
 
 				ftDevice.setLatencyTimer((byte)16);
 				// ftDevice.setReadTimeout(1000);
@@ -965,9 +1029,11 @@ public class Serial extends CordovaPlugin {
 				// byte NAK = 0x15;
 				byte[] b_ACK = new byte[]{ACK};
 				byte[] b_NAK = new byte[]{NAK};
+				byte[] b_CAN = new byte[]{CAN};
+
 
 				byte[] data = new byte[1029];
-				byte[] bigBuff = new byte[200000000];
+				//byte[] bigBuff = new byte[200000000];
 
 				boolean EndOfTransferFlag = false;
 
@@ -980,13 +1046,17 @@ public class Serial extends CordovaPlugin {
 				int block_number = 0;
 				int queue = 0;
 
-				ftDevice.write(d_char);
+				stopRequired = false;
+				
+				// Send 'D' to start the transfer at the eldest dataset
+				if (dnum == -1) { ftDevice.write(d_char); }
+				
 				// Send 'C' to start the transfer
 				int bytesWritten = ftDevice.write(c_char);
 				Log.d(TAG, "Bytes written: " + bytesWritten);
 				
 
-				while (!(EndOfTransferFlag || stopStreamRequired)) {
+				while (!(EndOfTransferFlag || stopRequired)) {
 					// Try and read 1029 bytes (a complete XMODEM-1K block).
 					readBytes = ftDevice.read(data, 1029, 500);
 					Log.d(TAG, "Received bytes: " + readBytes);
@@ -1001,8 +1071,9 @@ public class Serial extends CordovaPlugin {
 									// End of transmission.
 									EndOfTransferFlag = true;
 									Log.d(TAG, "EOT received, blocks: " + block_number);
+									Log.d(TAG, "Total errors: " + total_errors);
 									ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-									ftDevice.write(b_ACK);
+									ftDevice.write(stopRequired ? b_CAN : b_ACK);
 									// Close file ?
 								}
 								else {
@@ -1013,7 +1084,7 @@ public class Serial extends CordovaPlugin {
 										retries += 1;
 										Log.d(TAG, "Retry after 1 byte");
 										ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-										ftDevice.write(b_NAK);
+										ftDevice.write(stopRequired ? b_CAN : b_NAK);
 									}
 									else {
 										EndOfTransferFlag = true;
@@ -1030,7 +1101,7 @@ public class Serial extends CordovaPlugin {
 									retries += 1;
 									Log.d(TAG, "Retry after failing to read 1 byte");
 									ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-									ftDevice.write(b_NAK);
+									ftDevice.write(stopRequired ? b_CAN : b_NAK);
 								}
 								else {
 									EndOfTransferFlag = true;
@@ -1048,14 +1119,14 @@ public class Serial extends CordovaPlugin {
 								retries += 1;
 								Log.d(TAG, "Retry After wrong number of bytes read: " + readBytes);
 								ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-								ftDevice.write(b_NAK);
+								ftDevice.write(stopRequired ? b_CAN : b_NAK);
 							}
 							else {
 								EndOfTransferFlag = true;
 								success = -4;
 								Log.d(TAG, "Error: Wrong number of bytes read: " + readBytes);
 								ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-								ftDevice.write(b_NAK);
+								ftDevice.write(stopRequired ? b_CAN : b_NAK);
 							}
 						}
 					}
@@ -1063,21 +1134,41 @@ public class Serial extends CordovaPlugin {
 						if (true) {	// Check block here.
 							// Copy the contents of sourceArray into destinationArray at position 'position'
 							// Save in file instead of array.
-							System.arraycopy(data, 0, bigBuff, position, 1029); // i2 will be 1024 after validating block. 3 debut 2 fin
-							position += 1029;    // Will be 1024 after validating frame.
+							try {
+								fileOutputStream.write(data, 3, 1024);
+							} catch (IOException e) {
+								// deal with error
+								Log.d(TAG, e.getMessage());
+								callbackContext.error(e.getMessage());
+								return;
+							}
+							// System.arraycopy(data, 0, bigBuff, position, 1029); // i2 will be 1024 after validating block. 3 debut 2 fin
+							// position += 1029;    // Will be 1024 after validating frame.
 							block_number += 1;
 							Log.d(TAG, "Received block nr " + block_number);
+							// Acknowledge message
 							ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-							ftDevice.write(b_ACK);
+							ftDevice.write(stopRequired ? b_CAN : b_ACK);
 							retries = 0;
+							// Send progress information
+							if (streamCallback != null && block_number % 100 == 0) {
+								JSONObject returnObj = new JSONObject();
+								addProperty(returnObj, "blockNumber", block_number);
+								PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, returnObj);
+								pluginResult.setKeepCallback(true);
+								streamCallback.sendPluginResult(pluginResult);
+								Log.d(TAG, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Showed block nr " + block_number);
+							}
 						}
 						else {
+							// Error in received block.
 							total_errors += 1;
 							if (retries < maxRetries) {
 								retries += 1;
 								Log.d(TAG, "Retry After invalid block");
+								// Nack message
 								ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
-								ftDevice.write(b_NAK);
+								ftDevice.write(stopRequired ? b_CAN : b_NAK);
 							}
 							else {
 								EndOfTransferFlag = true;
@@ -1088,7 +1179,20 @@ public class Serial extends CordovaPlugin {
 					}
 				}
 
+				// Close the file stream
+				try {
+					fileOutputStream.close();
+				} catch (IOException e) {
+					// deal with error
+					Log.d(TAG, e.getMessage());
+					callbackContext.error(e.getMessage());
+					return;
+				}
+
 				ftDevice.purge((byte) (D2xxManager.FT_PURGE_TX | D2xxManager.FT_PURGE_RX));
+				Log.d(TAG, "File closed: " + fileName);
+				callbackContext.success("File closed: " + fileName);
+
 			}
 		});
 	}
@@ -1174,95 +1278,11 @@ public class Serial extends CordovaPlugin {
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
 				// Close the file stream
-				stopStreamRequired = true;
+				stopRequired = true;
 				Log.d(TAG, "Stop stream requested!");
 				callbackContext.success("Stop stream requested!");
 			}
 		});
-	}
-
-
-	/**
-	 * Dispatch the XMODEM data to javascript
-	 * This file handles the mechanism of the XMODEM Rx Protocole 
-	 * @param msg the array of received bytes
-	 */
-	private void onUpdateSerialStream(byte[] msg) {
-		// I the callback has not been registered, return
-		if( readCallback == null ) { return; }
-		Log.d(TAG, "Received bytes1:" + msg.length + " Position:" + mReadBuffer.position() + " Capa: " + mReadBuffer.capacity());
-		
-		// Store received bytes in the buffer and increment the position
-		mReadBuffer.put(msg);
-
-		// Test for too many errors
-		if (tryCounter > XMODEM_MAX_ERRORS) {
-			Log.d(TAG,"[RECV] - Too many trials, closing port");
-			PluginResult result = new PluginResult(PluginResult.Status.OK, msg); // TODO : send error message
-			result.setKeepCallback(true);
-			readCallback.sendPluginResult(result);
-			// TODO : close port
-			return;
-		}
-
-		// Test for end of transmission (EOF)
-		if (mReadBuffer.position() == 1) {
-			if (msg[0] == EOT) {
-				Log.d(TAG, "Received EOT");
-				PluginResult result = new PluginResult(PluginResult.Status.OK, msg);
-				result.setKeepCallback(true);
-				readCallback.sendPluginResult(result);
-			} else 	if (msg[0] == NAK) {
-				// Test for transmission error (NAK)
-				Log.d(TAG, "Received NAK");
-				tryCounter++;
-				// resend command
-				try {
-					Log.d(TAG, "Resending command");
-					if (!stopStreamRequired) {port.write(command, 1000);}
-				}
-				catch (IOException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					PluginResult result = new PluginResult(PluginResult.Status.OK, msg); // TODO : send error message
-					result.setKeepCallback(true);
-					readCallback.sendPluginResult(result);
-				}
-			}
-		} else if (mReadBuffer.position() >= XMODEM_MESSAGE_LENGTH) {
-			if (msg[0] == STX && msg[1] + msg[2] == 0xFF && msg[2] == blockNumber / 0x100) {
-				// Test for full message block
-				// Transfer bytebuffer to byte array
-				byte[] data = new byte[mReadBuffer.position()];
-				mReadBuffer.flip();			
-				mReadBuffer.get(data, 3, XMODEM_BLOCK_LENGTH);
-				mReadBuffer.clear();
-				Log.d(TAG, "Transfered bytes:" + data.length);
-				// PluginResult result = new PluginResult(PluginResult.Status.OK, data);
-				// result.setKeepCallback(true);
-				// readCallback.sendPluginResult(result);
-				// Record data to fileStream
-				try {
-					// Copy block to file
-					fileStream.write(data);
-
-					// Send ACK to get next block
-					command[0] = stopStreamRequired ? (byte) CAN : (byte) ACK ;
-					port.write(command, 1000);
-					// Increment block number
-					blockNumber++;
-					tryCounter = 0;
-				}
-				catch (IOException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					PluginResult result = new PluginResult(PluginResult.Status.OK, msg); // TODO : send error message
-					result.setKeepCallback(true);
-					readCallback.sendPluginResult(result);
-				}
-			}
-		}
-
 	}
 
 
@@ -1273,33 +1293,17 @@ public class Serial extends CordovaPlugin {
 	private void closeSerialStream(final CallbackContext callbackContext) {
 		cordova.getThreadPool().execute(new Runnable() {
 			public void run() {
-				stopIoManager(); // Added by @COV
-				try {
-					// Make sure we don't die if we try to close an non-existing port!
-					if (port != null) {
-						port.close();
-					}
-					port = null;
-					// Close the file stream
-					if (fileStream != null) {
-						fileStream.close();
-					}
-					fileStream = null;
-					callbackContext.success();
-					// Reset all stream variables
-					readCallback = null;
-					mReadBuffer.clear();
-					tryCounter = 0;
-					blockNumber = 0;
-					stopStreamRequired = false;
-					streamMode = false;					
+				//stopIoManager(); // Added by @COV TODOP is usefull ?
 
-				}
-				catch (IOException e) {
-					// deal with error
-					Log.d(TAG, e.getMessage());
-					callbackContext.error(e.getMessage());
-				}
+					// Close the USB serial port
+					if ( ftDevice != null && true == ftDevice.isOpen() ) 
+					{
+						ftDevice.close();
+						ftDevice = null;
+					}
+
+				callbackContext.success ("Serial port closed");
+
 				// This method will cause app crash when the port is closed
 				// onDeviceStateChange();
 				

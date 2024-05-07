@@ -45,6 +45,15 @@ var serial = {
             [{'opts': opts}]
         );
     },
+    registerStreamCallback: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'registerStreamCallback',
+            []
+        );
+    },
     startSerialStream: function(opts, successCallback, errorCallback) {
         cordova.exec(
             successCallback,
@@ -52,6 +61,24 @@ var serial = {
             'Serial',
             'startSerialStream',
             [{'opts': opts}]
+        );
+    },
+    stopSerialStream: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'stopSerialStream',
+            []
+        );
+    },
+    closeSerialStream: function(successCallback, errorCallback) {
+        cordova.exec(
+            successCallback,
+            errorCallback,
+            'Serial',
+            'closeSerialStream',
+            []
         );
     },
     write: function(data, successCallback, errorCallback) {
@@ -90,15 +117,7 @@ var serial = {
             []
         );
     },
-    closeStream: function(successCallback, errorCallback) {
-        cordova.exec(
-            successCallback,
-            errorCallback,
-            'Serial',
-            'closeSerialStream',
-            []
-        );
-    },
+
     registerReadCallback: function(successCallback, errorCallback) {
         cordova.exec(
             successCallback,
